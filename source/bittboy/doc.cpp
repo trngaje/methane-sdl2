@@ -51,6 +51,10 @@ static int SampleChannel = 5;	// Used by CMethDoc::PlaySample
 static char HighScoreFileName[] = "Methane.HiScores";
 #define HighScoreLoadBufferSize (MAX_HISCORES * 64)
 
+#ifdef OGS_SDL2
+SDL_Window* sdlWindow=NULL;
+SDL_Surface* sdlSurface=NULL;
+#endif
 
 //------------------------------------------------------------------------------
 // The Main Function
@@ -72,11 +76,15 @@ int main (void)
 		fprintf (stderr, "Can't init SDL : %s", SDL_GetError());
 		return 1;
 	}
-	atexit (SDL_Quit);
+	atexit(SDL_Quit);
 	SDL_JoystickOpen (0);
 
+#ifdef OGS_SDL2
+
+#else
     SDL_EnableKeyRepeat (
 		SDL_DEFAULT_REPEAT_DELAY, SDL_DEFAULT_REPEAT_INTERVAL);
+#endif
 
 	// run
 	main_code();					// The main routine
@@ -96,8 +104,25 @@ hw_set_cpu (75);
 	JOYSTICK *jptr1;
 //	JOYSTICK *jptr2;
 
+#ifdef OGS_SDL2
+	sdlWindow = SDL_CreateWindow("methane",
+                              SDL_WINDOWPOS_UNDEFINED,  
+                              SDL_WINDOWPOS_UNDEFINED,  
+                              GP2X_SCREEN_W, GP2X_SCREEN_H,
+                              SDL_WINDOW_OPENGL); 
+
+    sdlSurface = SDL_GetWindowSurface(sdlWindow);
+	SdlScreen = SDL_CreateRGBSurface(SDL_SWSURFACE, GP2X_SCREEN_W, GP2X_SCREEN_H, 8, 0, 0, 0, 0);
+	
+	if(SDL_NumJoysticks() > 0)
+	{
+		printf("[trngaje] SDL_NumJoysticks = %d\n", SDL_NumJoysticks());
+		SDL_JoystickOpen(0);
+	}	
+#else
 	SdlScreen = SDL_SetVideoMode (
 		GP2X_SCREEN_W, GP2X_SCREEN_H, 8, SDL_SWSURFACE|SDL_FULLSCREEN);
+#endif
 	if (!SdlScreen)
 	{
 		fprintf (stderr, "Couldn't set video mode : %s\n", SDL_GetError());
@@ -128,33 +153,59 @@ hw_set_cpu (75);
 
 	SDL_initFramerate (&FpsManager);
 	int run = 1;
+	
+	Uint8 key[2048];
+	memset(key, 0, sizeof(key));
+	
 	while(run)
 	{
-#define GP2X_WIN32_DEBUG
+
+//#define GP2X_WIN32_DEBUG
 
 #ifdef GP2X_WIN32_DEBUG
 		SDL_PumpEvents();
+#ifdef OGS_SDL2
+		Uint8 * key = (Uint8*)SDL_GetKeyboardState(NULL);
+#else
 		Uint8 * key = SDL_GetKeyState (NULL);
+#endif
 
+#ifdef OGS_SDL2
+		if (key[SDL_SCANCODE_RCTRL]) break;
+		if (key[SDL_SCANCODE_ESCAPE])
+#else
 		if (key[SDLK_RCTRL]) break;
 		if (key[SDLK_ESCAPE])
+#endif
 		{
 			Game.m_GameTarget.m_Game.TogglePuffBlow();
+			run = 0;
 		}
+		
+		
 //		jptr1->key = key;
 //		jptr2->key = key;
-
+#ifdef OGS_SDL2
+		if (key[SDL_SCANCODE_RIGHT]) {
+#else
 		if (key[SDLK_RIGHT]) {
+#endif
 			jptr1->right = 1;
 		}
 		else {
 			jptr1->right = 0;
 		}
-
+#ifdef OGS_SDL2
+		jptr1->left  = key[SDL_SCANCODE_LEFT] > 0;
+		jptr1->up    = key[SDL_SCANCODE_LCTRL] > 0;
+		jptr1->down  = key[SDL_SCANCODE_DOWN] > 0;
+		jptr1->fire  = key[SDL_SCANCODE_SPACE] > 0;
+#else
 		jptr1->left  = key[SDLK_LEFT] > 0;
 		jptr1->up    = key[SDLK_LCTRL] > 0;
 		jptr1->down  = key[SDLK_DOWN] > 0;
 		jptr1->fire  = key[SDLK_SPACE] > 0;
+#endif
 		jptr1->key = 13;	// Fake key press (required for high score table)
 #else
 		// event loop
@@ -163,6 +214,116 @@ hw_set_cpu (75);
 		{
 			switch(event.type)
 			{
+				case SDL_QUIT:
+					run = 0;
+					break;
+				case SDL_KEYDOWN:			// Button press
+	#ifdef OGS_SDL2
+					key[event.key.keysym.scancode] = 1;
+					
+					jptr1->left  = key[SDL_SCANCODE_LEFT] > 0;
+					jptr1->right    = key[SDL_SCANCODE_RIGHT] > 0;
+					jptr1->up    = key[SDL_SCANCODE_LCTRL] > 0;
+					jptr1->down  = key[SDL_SCANCODE_DOWN] > 0;
+					jptr1->fire  = key[SDL_SCANCODE_SPACE] > 0;
+	#else
+					key[event.key.keysym.sym] = 1;
+					jptr1->left  = key[SDLK_LEFT] > 0;
+					jptr1->right  = key[SDLK_RIGHT] > 0;
+					jptr1->up    = key[SDLK_LCTRL] > 0;
+					jptr1->down  = key[SDLK_DOWN] > 0;
+					jptr1->fire  = key[SDLK_SPACE] > 0;
+	#endif
+
+	#ifdef OGS_SDL2
+					if (key[SDL_SCANCODE_ESCAPE])
+	#else
+					if (key[SDLK_ESCAPE])
+	#endif
+					{
+						Game.m_GameTarget.m_Game.TogglePuffBlow();
+						run = 0;
+					}
+
+				break;
+				case SDL_KEYUP:				// Button release
+	#ifdef OGS_SDL2
+					key[event.key.keysym.scancode] = 0;
+					jptr1->left  = key[SDL_SCANCODE_LEFT] > 0;
+					jptr1->right    = key[SDL_SCANCODE_RIGHT] > 0;
+					jptr1->up    = key[SDL_SCANCODE_LCTRL] > 0;
+					jptr1->down  = key[SDL_SCANCODE_DOWN] > 0;
+					jptr1->fire  = key[SDL_SCANCODE_SPACE] > 0;
+	#else
+					key[event.key.keysym.sym] = 0;
+					jptr1->left  = key[SDLK_LEFT] > 0;
+					jptr1->right  = key[SDLK_RIGHT] > 0;
+					jptr1->up    = key[SDLK_LCTRL] > 0;
+					jptr1->down  = key[SDLK_DOWN] > 0;
+					jptr1->fire  = key[SDLK_SPACE] > 0;
+	#endif
+				break;					
+					
+				case SDL_JOYHATMOTION:
+					if (event.jhat.value == SDL_HAT_CENTERED) {
+						jptr1->left  = 0;
+						jptr1->right  = 0;	
+						jptr1->up  = 0;
+						jptr1->down  = 0;						
+					}
+					else 
+					{
+						if (event.jhat.value & SDL_HAT_LEFT) 
+						{
+							jptr1->left  = 1;
+							jptr1->right  = 0;
+						}
+						else if (event.jhat.value & SDL_HAT_RIGHT) 
+						{
+							jptr1->left  = 0;
+							jptr1->right  = 1;
+						}
+						else
+						{
+							jptr1->left  = 0;
+							jptr1->right  = 0;					
+						}
+
+						if (event.jhat.value & SDL_HAT_UP) 
+						{
+							jptr1->up  = 1;
+							jptr1->down  = 0;
+						}
+						else if (event.jhat.value & SDL_HAT_DOWN) 
+						{
+							jptr1->up  = 0;
+							jptr1->down  = 1;
+						}
+						else
+						{
+							jptr1->up  = 0;
+							jptr1->down  = 0;			
+						}
+					}
+					break;
+#ifdef OGS_SDL2
+				case SDL_JOYBUTTONDOWN:
+					switch(event.jbutton.button)
+					{
+						case 1: jptr1->fire  = 1; break;
+						case 4: run = 0; break;
+						case 5: Game.m_GameTarget.m_Game.TogglePuffBlow(); break;
+						default : break;
+					}
+					break;
+				case SDL_JOYBUTTONUP:
+					switch(event.jbutton.button)
+					{
+						case 1: jptr1->fire  = 0; break;
+						default : break;
+					}
+					break;
+#else
 				case SDL_JOYBUTTONDOWN:
 					switch(event.jbutton.button)
 					{
@@ -203,6 +364,7 @@ hw_set_cpu (75);
 						default : break;
 					}
 					break;
+#endif
 				default:
 					break;
 			}
@@ -316,7 +478,11 @@ void CMethDoc::DrawScreen( void *screen_ptr )
 		colors[cnt].g = pptr->green;
 		colors[cnt].b = pptr->blue;
 	}
+#ifdef OGS_SDL2
+	SDL_SetPaletteColors(SdlScreen->format->palette, colors, 0, PALETTE_SIZE);
+#else
 	SDL_SetPalette (SdlScreen, SDL_LOGPAL|SDL_PHYSPAL, colors, 0, PALETTE_SIZE);
+#endif
 
 	// Copy the pixels
 	char * dptr = (char *) SdlScreen->pixels;
@@ -334,7 +500,15 @@ void CMethDoc::DrawScreen( void *screen_ptr )
 	}
 
 	// Show the new screen
+#ifdef OGS_SDL2
+	SDL_Surface* tempSurface = SDL_ConvertSurfaceFormat(SdlScreen, SDL_GetWindowPixelFormat(sdlWindow), 0);
+	//SDL_FillRect(SdlScreen, NULL, SDL_MapRGB(SdlScreen->format, 255, 0, 0));
+	SDL_BlitScaled(tempSurface, NULL, sdlSurface, NULL);
+	SDL_UpdateWindowSurface(sdlWindow);
+	SDL_FreeSurface(tempSurface);
+#else
 	SDL_Flip (SdlScreen);
+#endif
 }
 
 //------------------------------------------------------------------------------
